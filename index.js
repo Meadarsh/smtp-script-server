@@ -47,6 +47,9 @@ function updateDomainConfig(domain, dkimValue) {
     return true;
 }
 
+app.get("/", (req, res) => {
+    res.send("Hello World");
+});
 app.post("/update-dkim", (req, res) => {
     const { domain, dkim_value } = req.body;
 
