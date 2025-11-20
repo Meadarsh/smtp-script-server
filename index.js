@@ -115,6 +115,34 @@ app.get("/", (req, res) => {
 });
 
 // ====================================================================
+//                       GET IP FROM PMTA CONFIG
+// ====================================================================
+
+app.get("/get-ip", (req, res) => {
+    try {
+        const config = fs.readFileSync("/etc/pmta/config", "utf8");
+        const match = config.match(/smtp-listener\s+([0-9\.]+):/);
+        
+        if (!match || !match[1]) {
+            return res.status(404).json({ 
+                error: "IP address not found in config",
+                message: "Could not find smtp-listener IP in /etc/pmta/config"
+            });
+        }
+
+        res.json({ 
+            status: "success",
+            ip: match[1]
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: err.message,
+            details: "Failed to read config file or extract IP address"
+        });
+    }
+});
+
+// ====================================================================
 //                       DKIM UPDATE API
 // ====================================================================
 app.post("/update-dkim", (req, res) => {
@@ -283,6 +311,6 @@ cron.schedule("*/5 * * * *", async () => {
 //                        START EXPRESS SERVER
 // ====================================================================
 
-app.listen(3001, () => {
+app.listen(3001, "0.0.0.0",() => {
     console.log("🔥 PMTA Warmup API running on port 3001");
 });
