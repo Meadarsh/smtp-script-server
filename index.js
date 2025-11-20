@@ -311,6 +311,6 @@ cron.schedule("*/5 * * * *", async () => {
 //                        START EXPRESS SERVER
 // ====================================================================
 
-app.listen(3001, "0.0.0.0",() => {
+app.listen(3000, "0.0.0.0",() => {
     console.log("🔥 PMTA Warmup API running on port 3001");
 });
