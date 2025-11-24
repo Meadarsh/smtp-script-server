@@ -102,7 +102,7 @@ if (!fs.existsSync(DKIM_DIR)) fs.mkdirSync(DKIM_DIR, { recursive: true });
 // ====================================================================
 //                    IN-MEMORY WARMUP STORAGE
 // ====================================================================
-let warmupAccounts = [];   // No DB. Stored in RAM only.
+let warmupAccounts = []; // No DB. Stored in RAM only.
 
 // ====================================================================
 //                           EXPRESS SETUP
@@ -111,7 +111,7 @@ const app = express();
 app.use(bodyParser.json());
 
 app.get("/", (req, res) => {
-    res.send("🔥 PMTA Warmup Engine Running (No Database Mode)");
+  res.send("🔥 PMTA Warmup Engine Running (No Database Mode)");
 });
 
 // ====================================================================
@@ -119,198 +119,104 @@ app.get("/", (req, res) => {
 // ====================================================================
 
 app.get("/get-ip", (req, res) => {
-    try {
-        const config = fs.readFileSync("/etc/pmta/config", "utf8");
-        const match = config.match(/smtp-listener\s+([0-9\.]+):/);
-        
-        if (!match || !match[1]) {
-            return res.status(404).json({ 
-                error: "IP address not found in config",
-                message: "Could not find smtp-listener IP in /etc/pmta/config"
-            });
-        }
+  try {
+    const config = fs.readFileSync("/etc/pmta/config", "utf8");
+    const match = config.match(/smtp-listener\s+([0-9\.]+):/);
 
-        res.json({ 
-            status: "success",
-            ip: match[1]
-        });
-    } catch (err) {
-        res.status(500).json({ 
-            error: err.message,
-            details: "Failed to read config file or extract IP address"
-        });
+    if (!match || !match[1]) {
+      return res.status(404).json({
+        error: "IP address not found in config",
+        message: "Could not find smtp-listener IP in /etc/pmta/config",
+      });
     }
+
+    res.json({
+      status: "success",
+      ip: match[1],
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+      details: "Failed to read config file or extract IP address",
+    });
+  }
+});
+
+app.get("/send-mail", async (req, res) => {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: "107.175.67.25",
+      port: 2525,
+      secure: false,
+      tls: {
+        rejectUnauthorized: false,
+      },
+      auth: {
+        user: "admin",
+        pass: "Nikhil1234$$",
+      },
+    });
+    const info = await transporter.sendMail({
+      from: "admin@zeusbull.com",
+      to: "itsadarsh33@gmail.com",
+      subject: "Test Email",
+      text: "This is a test email",
+    });
+    res.json({
+      status: "success",
+      message: "Email sent successfully",
+      info: info,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+      details: "Failed to read config file or extract IP address",
+    });
+  }
 });
 
 // ====================================================================
 //                       DKIM UPDATE API
 // ====================================================================
 app.post("/update-dkim", (req, res) => {
-    try {
-        const { domain, dkim_value } = req.body;
+  try {
+    const { domain, dkim_value } = req.body;
 
-        if (!domain || !dkim_value)
-            return res.status(400).json({ error: "domain and dkim_value required" });
+    if (!domain || !dkim_value)
+      return res.status(400).json({ error: "domain and dkim_value required" });
 
-        const pemPath = `${DKIM_DIR}/${domain}.pem`;
-        const confPath = `${DOMAIN_DIR}/${domain}.conf`;
+    const pemPath = `${DKIM_DIR}/${domain}.pem`;
+    const confPath = `${DOMAIN_DIR}/${domain}.conf`;
 
-        // Write DKIM private key
-        fs.writeFileSync(pemPath, dkim_value.trim());
-        fs.chmodSync(pemPath, 0o600);
+    // FIX ❗: Convert escaped "\\n" to actual newlines
+    const fixedKey = dkim_value.replace(/\\n/g, "\n").trim();
 
-        // Write domain config
-        const domainConf = `
+    // Write DKIM private key correctly
+    fs.writeFileSync(pemPath, fixedKey);
+    fs.chmodSync(pemPath, 0o600);
+
+    // Write domain config
+    const domainConf = `
 <domain ${domain}>
-  dkim-sign yes
-  domain-key-file ${pemPath}
+  dkim-sign yes;
+  dkim-private-key-file ${pemPath};
 </domain>
         `.trim();
 
-        fs.writeFileSync(confPath, domainConf);
+    fs.writeFileSync(confPath, domainConf);
 
-        execSync("pmta reload");
+    execSync("pmta reload");
 
-        res.json({ status: "success", message: "DKIM updated successfully" });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ====================================================================
-//                     ADD WARMUP PLAN (CREATE)
-// ====================================================================
-
-app.post("/warmup/add", (req, res) => {
-    try {
-        const data = req.body;
-
-        if (!data.email || !data.smtp_user || !data.smtp_pass)
-            return res.status(400).json({ error: "email, smtp_user, smtp_pass required" });
-
-        const plan = {
-            id: Date.now(),
-            email: data.email,
-            smtp_user: data.smtp_user,
-            smtp_pass: data.smtp_pass,
-            warmup_plan: data.warmup_plan || [],
-            receivers: data.receivers || [],
-            current_day: 1,
-            status: "active"
-        };
-
-        warmupAccounts.push(plan);
-
-        res.json({ status: "success", warmup: plan });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ====================================================================
-//                     UPDATE WARMUP PLAN
-// ====================================================================
-
-app.post("/warmup/update/:id", (req, res) => {
-    const id = Number(req.params.id);
-    const updates = req.body;
-
-    const idx = warmupAccounts.findIndex(a => a.id === id);
-    if (idx === -1)
-        return res.status(404).json({ error: "Warmup plan not found" });
-
-    warmupAccounts[idx] = {
-        ...warmupAccounts[idx],
-        ...updates
-    };
-
-    res.json({ status: "success", updated: warmupAccounts[idx] });
-});
-
-// ====================================================================
-//                     DELETE WARMUP PLAN
-// ====================================================================
-
-app.delete("/warmup/delete/:id", (req, res) => {
-    const id = Number(req.params.id);
-
-    const before = warmupAccounts.length;
-    warmupAccounts = warmupAccounts.filter(acc => acc.id !== id);
-
-    if (warmupAccounts.length === before)
-        return res.status(404).json({ error: "Warmup plan not found" });
-
-    res.json({ status: "success", message: "Warmup plan deleted" });
-});
-
-// ====================================================================
-//                     LIST WARMUP PLANS
-// ====================================================================
-
-app.get("/warmup/list", (req, res) => {
-    res.json(warmupAccounts);
-});
-
-// ====================================================================
-//                      SEND SINGLE WARMUP EMAIL
-// ====================================================================
-
-async function sendWarmupEmail(account, receiver) {
-    const transporter = nodemailer.createTransport({
-        host: "127.0.0.1",
-        port: 2525,
-        secure: false,
-        auth: {
-            user: account.smtp_user,
-            pass: account.smtp_pass
-        }
-    });
-
-    return transporter.sendMail({
-        from: account.email,
-        to: receiver,
-        subject: "Warmup Email",
-        text: "This is an automated warmup email."
-    });
-}
-
-// ====================================================================
-//               CRON JOB — SEND WARMUP EMAILS EVERY 5 MIN
-// ====================================================================
-
-cron.schedule("*/5 * * * *", async () => {
-    console.log("⚡ Warmup Cron Triggered...");
-
-    for (let acc of warmupAccounts) {
-        if (acc.status !== "active") continue;
-
-        const today = acc.warmup_plan.find(p => p.day === acc.current_day);
-        if (!today) continue;
-
-        const totalSend = today.send;
-
-        console.log(`📨 Sending ${totalSend} warmup emails for ${acc.email}`);
-
-        for (let i = 0; i < totalSend; i++) {
-            const receiver = acc.receivers[i % acc.receivers.length];
-            try {
-                await sendWarmupEmail(acc, receiver);
-                console.log(`✔ Sent to ${receiver}`);
-            } catch (err) {
-                console.log("❌ Send Error:", err.message);
-            }
-        }
-
-        acc.current_day += 1;
-    }
+    res.json({ status: "success", message: "DKIM updated successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ====================================================================
 //                        START EXPRESS SERVER
 // ====================================================================
 
-app.listen(3000, "0.0.0.0",() => {
-    console.log("🔥 PMTA Warmup API running on port 3001");
+app.listen(3000, "0.0.0.0", () => {
+  console.log("🔥 PMTA Warmup API running on port 3001");
 });
