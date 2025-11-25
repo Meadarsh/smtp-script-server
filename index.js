@@ -76,8 +76,8 @@ app.get("/send-mail", async (req, res) => {
       },
     });
     const info = await transporter.sendMail({
-      from: "admin@zeusbull.com",
-      to: "itsadarsh33@gmail.com",
+      from: "admin@autometa.in",
+      to: "insanedragon77@gmail.com",
       subject: "Test Email",
       text: "This is a test email",
     });
@@ -118,7 +118,6 @@ app.post("/update-dkim", (req, res) => {
     const domainConf = `
 <domain ${domain}>
   dkim-sign yes;
-  dkim-private-key-file ${pemPath};
 </domain>
         `.trim();
 
