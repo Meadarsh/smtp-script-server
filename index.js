@@ -107,11 +107,24 @@ app.post("/update-dkim", (req, res) => {
     const pemPath = `${DKIM_DIR}/${domain}.pem`;
     const confPath = `${DOMAIN_DIR}/${domain}.conf`;
 
-    // FIX ❗: Convert escaped "\\n" to actual newlines
-    const fixedKey = dkim_value.replace(/\\n/g, "\n").trim();
+    // Handle PEM content: convert escaped "\\n" to actual newlines if needed
+    // Also handle cases where newlines might be escaped differently in JSON
+    let fixedKey = dkim_value;
+    
+    // If the key doesn't contain actual newlines, try to fix escaped ones
+    if (!fixedKey.includes("\n")) {
+      // Replace escaped newlines (from JSON.stringify)
+      fixedKey = fixedKey.replace(/\\n/g, "\n");
+      // Also handle Windows-style line endings if present
+      fixedKey = fixedKey.replace(/\\r\\n/g, "\n");
+      fixedKey = fixedKey.replace(/\\r/g, "\n");
+    }
+    
+    // Ensure proper PEM format with newlines
+    fixedKey = fixedKey.trim() + "\n";
 
     // Write DKIM private key correctly
-    fs.writeFileSync(pemPath, fixedKey);
+    fs.writeFileSync(pemPath, fixedKey, { encoding: "utf8" });
     fs.chmodSync(pemPath, 0o600);
 
     // Write domain config
