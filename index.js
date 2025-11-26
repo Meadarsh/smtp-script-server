@@ -117,7 +117,6 @@ app.post("/update-dkim", (req, res) => {
     // Write domain config
     const domainConf = `
 <domain ${domain}>
-  dkim-sign yes;
 </domain>
         `.trim();
 
